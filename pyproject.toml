@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "homekit-upkeep"
+dynamic = ["version"]
+description = "Household maintenance reminders as Apple Home Contact Sensors — water the plants, clean the filters, on schedule"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [{name = "Nguyen Ha Dong"}]
+dependencies = [
+    "HAP-python>=4.9.2",
+]
+
+[project.scripts]
+homekit-upkeep = "homekit_upkeep.main:main"
+
+[tool.setuptools.packages.find]
+include = ["homekit_upkeep*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "homekit_upkeep.__version__"}

@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.venv*/
+run/
+*.state
+upkeep_state.json

@@ -1,0 +1,30 @@
+{
+  "bridge_name": "Home Upkeep",
+  "port": 51830,
+  "pincode": "031-45-154",
+  "accessory_state": "run/accessory.state",
+  "state_path": "run/upkeep_state.json",
+  "http_host": "127.0.0.1",
+  "http_port": 7872,
+  "http_api_key": "",
+  "tick_seconds": 30,
+  "tasks": [
+    {
+      "id": "office_zz_plant",
+      "name": "Water Office ZZ Plant",
+      "interval_days": 14,
+      "time": "09:00"
+    },
+    {
+      "id": "ac_filter_clean",
+      "name": "Clean AC Filters",
+      "interval_days": 30,
+      "time": "10:00"
+    },
+    {
+      "id": "water_filter",
+      "name": "Replace Water Filter",
+      "interval_days": 90
+    }
+  ]
+}
