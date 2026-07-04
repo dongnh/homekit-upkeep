@@ -1,9 +1,16 @@
-"""HomeKit accessory definitions — one Contact Sensor + mark-done Switch per task.
+"""HomeKit accessory definitions — one Contact Sensor + mark-done Switch +
+countdown Battery per task.
 
 Polarity follows light-programmer-homekit's convention (the standard one for
 contact sensors): a task in good standing reads **Closed** (contact detected)
 and an overdue one **Opened** — the alert state, so Apple Home's fixed
 "<accessory name> Opened" notification means "time to do this".
+
+The Battery is the countdown display: HomeKit has no free-text/number tile,
+so each task carries a virtual battery that reads 100% right after mark-done
+and drains linearly to 0% at the due moment. Below LOW_BATTERY_PCT the
+low-battery badge appears on the tile — an early "coming due soon" warning
+before the sensor opens.
 """
 import asyncio
 import logging
@@ -24,6 +31,12 @@ DEFAULT_TICK = 30  # seconds between due-ness re-evaluations
 # 0 = "detected" → "Closed". On schedule = closed, due = opened.
 _OPEN = 1
 _CLOSED = 0
+
+# Battery "charge" (share of the cycle still remaining) at or below which
+# StatusLowBattery flips on and Apple Home badges the tile. 20% of a weekly
+# task ≈ 1.4 days' notice; of a monthly one ≈ 5.6 days.
+LOW_BATTERY_PCT = 20
+_NOT_CHARGEABLE = 2  # ChargingState — a virtual battery never charges
 
 # HomeKit Accessory IDs (AIDs). pyhap assigns child AIDs by INSERTION ORDER
 # and never persists them, so a changed task set would re-target Apple Home
@@ -72,12 +85,14 @@ def _assign_aids(task_ids) -> dict:
 
 class UpkeepTask(Accessory):
     """One maintenance task: a Contact Sensor carrying the due state (drives
-    notifications) plus a Switch that marks the task done — flip it on when
-    the chore is finished; the cycle restarts and the switch snaps back off."""
+    notifications), a Switch that marks the task done — flip it on when the
+    chore is finished; the cycle restarts and the switch snaps back off —
+    and a virtual Battery counting down the cycle (100% = just done,
+    0% = due, low-battery badge = coming due soon)."""
     category = CATEGORY_SENSOR
 
     def __init__(self, driver, display_name: str, task_id: str, on_done,
-                 due: bool = False, aid: int = None):
+                 due: bool = False, level: int = 100, aid: int = None):
         super().__init__(driver, display_name, aid=aid)
         _set_info(self, serial=f"upkeep-{task_id}", model="HomeUpkeepTask")
         self.task_id = task_id
@@ -90,6 +105,12 @@ class UpkeepTask(Accessory):
         self.char_on = switch.configure_char(
             "On", value=False, setter_callback=self._switch_set,
         )
+        batt = self.add_preload_service("BatteryService")
+        self.char_level = batt.configure_char("BatteryLevel", value=level)
+        self.char_low = batt.configure_char(
+            "StatusLowBattery", value=1 if level <= LOW_BATTERY_PCT else 0,
+        )
+        batt.configure_char("ChargingState", value=_NOT_CHARGEABLE)
 
     def _switch_set(self, value) -> None:
         if not value:
@@ -100,10 +121,12 @@ class UpkeepTask(Accessory):
         # (set_value does not re-enter this callback — only client writes do.)
         self.driver.loop.call_later(1.0, self.char_on.set_value, False)
 
-    def set_due(self, due: bool) -> None:
+    def set_status(self, due: bool, level: int) -> None:
         # set_value only notifies Apple Home when the value actually changes,
         # so re-applying the same state every tick is cheap and spam-free.
         self.char_contact.set_value(_OPEN if due else _CLOSED)
+        self.char_level.set_value(level)
+        self.char_low.set_value(1 if level <= LOW_BATTERY_PCT else 0)
 
 
 class UpkeepBridge(Bridge):
@@ -118,7 +141,8 @@ class UpkeepBridge(Bridge):
         self.tick = max(5, int(tick))
         self.task_accessories: dict = {}  # task id -> UpkeepTask
 
-    def _due_map(self, now: datetime) -> dict:
+    def _status_map(self, now: datetime) -> dict:
+        """{task id: (due, battery level)} for every task."""
         last = store.load(self.state_path)["last_done"]
         out = {}
         for t in self.tasks:
@@ -126,17 +150,18 @@ class UpkeepBridge(Bridge):
             if ld is None:
                 # Missing/corrupt timestamp — read as "just done" rather than
                 # opening the sensor on bad data; the next mark-done repairs it.
-                out[t["id"]] = False
+                out[t["id"]] = (False, 100)
                 continue
-            out[t["id"]] = now >= schedule.due_at(ld, t["interval_days"], t["time"])
+            d_at = schedule.due_at(ld, t["interval_days"], t["time"])
+            out[t["id"]] = (now >= d_at, schedule.battery_pct(ld, d_at, now))
         return out
 
     def refresh(self) -> None:
         """Recompute due-ness and push it onto the sensors. Runs in the HAP
         event loop (tick, switch callback, or call_soon_threadsafe from HTTP)."""
-        due = self._due_map(datetime.now())
+        status = self._status_map(datetime.now())
         for task_id, acc in self.task_accessories.items():
-            acc.set_due(due[task_id])
+            acc.set_status(*status[task_id])
 
     def mark_done(self, task_id: str) -> None:
         store.mark_done(self.state_path, task_id,
@@ -160,6 +185,7 @@ class UpkeepBridge(Bridge):
                 "last_done": ld.isoformat(timespec="seconds") if ld else None,
                 "due_at": d_at.isoformat(timespec="seconds") if d_at else None,
                 "due": bool(d_at is not None and now >= d_at),
+                "battery": schedule.battery_pct(ld, d_at, now) if d_at else 100,
             })
         return out
 
@@ -180,10 +206,11 @@ def build_bridge(driver: AccessoryDriver, name: str, tasks: list,
     bridge = UpkeepBridge(driver, name, tasks, state_path, tick)
     _set_info(bridge, serial="upkeep-bridge", model=MODEL)
     aids = _assign_aids([t["id"] for t in tasks])
-    due = bridge._due_map(datetime.now())
+    status = bridge._status_map(datetime.now())
     for t in tasks:
+        due, level = status[t["id"]]
         acc = UpkeepTask(driver, t["name"], t["id"], on_done=bridge.mark_done,
-                         due=due[t["id"]], aid=aids[t["id"]])
+                         due=due, level=level, aid=aids[t["id"]])
         bridge.task_accessories[t["id"]] = acc
         bridge.add_accessory(acc)
     return bridge

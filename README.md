@@ -4,7 +4,9 @@ Household maintenance on schedule, from the Home app — water the plants, clean
 
 ## What it is
 
-One accessory per recurring chore, each carrying a Contact Sensor and a Switch — the entire interface. **Closed** means the task is on schedule; **Open** means it's due (the standard convention: Open is the alert state). Turn on notifications and Apple Home tells you the moment a chore comes due — "Water Office ZZ Plant Opened". Done it? Flip the task's switch: the sensor closes, the countdown restarts, the switch snaps back off.
+One accessory per recurring chore, each carrying a Contact Sensor, a Switch and a countdown Battery — the entire interface. **Closed** means the task is on schedule; **Open** means it's due (the standard convention: Open is the alert state). Turn on notifications and Apple Home tells you the moment a chore comes due — "Water Office ZZ Plant Opened". Done it? Flip the task's switch: the sensor closes, the countdown restarts, the switch snaps back off.
+
+The battery is the countdown: HomeKit has no free-text tile, so each task reads 100% right after you mark it done and drains linearly to 0% at the due moment. Below 20% the low-battery badge appears — a "coming due soon" warning before the sensor ever opens.
 
 <img width="853" height="778" alt="image" src="https://github.com/user-attachments/assets/ff9ef072-753e-47fd-9cc6-484e51de12a3" />
 
@@ -41,7 +43,7 @@ On first run every task is seeded as "just done" — a fresh install shouldn't o
 
 ## HTTP API
 
-- `GET /tasks` — every task with `last_done`, `due_at` and current `due`.
+- `GET /tasks` — every task with `last_done`, `due_at`, current `due` and the countdown `battery` percentage.
 - `POST /done {"id": "office_zz_plant"}` — mark done now (same as the switch).
 - `POST /due {"id": "office_zz_plant"}` — force a task due now, for testing or "nag me about this today".
 

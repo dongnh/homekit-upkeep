@@ -2,7 +2,7 @@
 the same shape (and X-API-Key semantics) as light-programmer's mode_http.
 
 GET  /tasks        → {"tasks": [{id, name, interval_days, time, last_done,
-                                 due_at, due}, …]}
+                                 due_at, due, battery}, …]}
 POST /done {"id"}  → mark the task done now (sensor closes, cycle restarts)
 POST /due  {"id"}  → force the task due now (backdates last_done past the
                      interval) — for testing or "nag me about this today"
