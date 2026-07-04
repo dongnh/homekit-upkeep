@@ -6,6 +6,8 @@ Household maintenance on schedule, from the Home app — water the plants, clean
 
 One accessory per recurring chore, each carrying a Contact Sensor and a Switch — the entire interface. **Closed** means the task is on schedule; **Open** means it's due (the standard convention: Open is the alert state). Turn on notifications and Apple Home tells you the moment a chore comes due — "Water Office ZZ Plant Opened". Done it? Flip the task's switch: the sensor closes, the countdown restarts, the switch snaps back off.
 
+<img width="853" height="778" alt="image" src="https://github.com/user-attachments/assets/ff9ef072-753e-47fd-9cc6-484e51de12a3" />
+
 ## How it works
 
 The daemon *is* the schedule — no external service to poll. A config JSON lists the tasks (`id`, `name`, `interval_days`, earliest notify `time`); an atomically-written state file remembers when each was last done; a tick re-evaluates due-ness and mirrors it onto the sensors. Reminders fire at the task's notify time on the due day, not at whatever hour you happened to finish last time — and they stay up until you mark the task done.
