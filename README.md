@@ -4,7 +4,7 @@ Household maintenance on schedule, from the Home app — water the plants, clean
 
 ## What it is
 
-One accessory per recurring chore, each carrying a Contact Sensor, a due-lamp Lightbulb, a Switch and a countdown Battery — the entire interface. **Closed** means the task is on schedule; **Open** means it's due (the standard convention: Open is the alert state). Turn on notifications and Apple Home tells you the moment a chore comes due — "Water Office ZZ Plant Opened" — and the task's lamp lights up, so the room visibly shows work waiting. Done it? **Turn the lamp off**: the sensor closes, the countdown restarts. (The switch does the same and also covers doing a chore early, while its lamp is dark; a lamp switched on by hand just snaps back off.)
+One accessory per recurring chore, each carrying a Contact Sensor, a due-lamp Lightbulb and a countdown Battery — the entire interface. **Closed** means the task is on schedule; **Open** means it's due (the standard convention: Open is the alert state). Turn on notifications and Apple Home tells you the moment a chore comes due — "Water Office ZZ Plant Opened" — and the task's lamp lights up, so the room visibly shows work waiting. Done it? **Turn the lamp off**: the sensor closes, the countdown restarts. Finished a chore early, while its lamp is dark? Tap the lamp anyway — an early done is recorded and the lamp snaps back off. Any interaction with the lamp means "done".
 
 The battery is the countdown: HomeKit has no free-text tile, so each task reads 100% right after you mark it done and drains linearly to 0% at the due moment. Below 20% the low-battery badge appears — a "coming due soon" warning before the sensor ever opens.
 
@@ -44,7 +44,7 @@ On first run every task is seeded as "just done" — a fresh install shouldn't o
 ## HTTP API
 
 - `GET /tasks` — every task with `last_done`, `due_at`, current `due` and the countdown `battery` percentage.
-- `POST /done {"id": "office_zz_plant"}` — mark done now (same as the switch).
+- `POST /done {"id": "office_zz_plant"}` — mark done now (same as the lamp gesture).
 - `POST /due {"id": "office_zz_plant"}` — force a task due now, for testing or "nag me about this today".
 
 All endpoints honor `X-API-Key` when `http_api_key` is set.

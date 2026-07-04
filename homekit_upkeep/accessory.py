@@ -1,17 +1,20 @@
-"""HomeKit accessory definitions — one Contact Sensor + mark-done Switch +
-due-lamp Lightbulb + countdown Battery per task.
+"""HomeKit accessory definitions — one Contact Sensor + due-lamp Lightbulb +
+countdown Battery per task.
 
 Polarity follows light-programmer-homekit's convention (the standard one for
 contact sensors): a task in good standing reads **Closed** (contact detected)
 and an overdue one **Opened** — the alert state, so Apple Home's fixed
 "<accessory name> Opened" notification means "time to do this".
 
-The due-lamp is the visible indicator and the reset control: it lights up
-when the task comes due (the room shows "a light on"), and turning it OFF
-marks the task done. Only the Contact Sensor pushes notifications — HomeKit
-doesn't notify on lights — so the lamp complements the sensor, it doesn't
-replace it. The Switch stays for marking a task done early, while its lamp
-is dark.
+The due-lamp is the visible indicator and the ONLY control — any client
+interaction with it means "chore done". It lights up when the task comes due
+(the room shows "a light on"); turning it OFF marks the task done. Tapping a
+dark lamp (a chore finished early, before it was due) also marks done, and
+the lamp snaps back off. (v0.3.0 had a separate mark-done Switch for the
+early case; two same-named on/off services made Siri ambiguous, so v0.4.0
+folded both gestures into the lamp.) Only the Contact Sensor pushes
+notifications — HomeKit doesn't notify on lights — so the lamp complements
+the sensor, it doesn't replace it.
 
 The Battery is the countdown display: HomeKit has no free-text/number tile,
 so each task carries a virtual battery that reads 100% right after mark-done
@@ -92,11 +95,9 @@ def _assign_aids(task_ids) -> dict:
 
 class UpkeepTask(Accessory):
     """One maintenance task: a Contact Sensor carrying the due state (drives
-    notifications), a Switch that marks the task done — flip it on when the
-    chore is finished; the cycle restarts and the switch snaps back off —
-    a due-lamp Lightbulb (lit = due; turn it off to mark done) and a virtual
-    Battery counting down the cycle (100% = just done, 0% = due,
-    low-battery badge = coming due soon)."""
+    notifications), a due-lamp Lightbulb (lit = due; any interaction = mark
+    done) and a virtual Battery counting down the cycle (100% = just done,
+    0% = due, low-battery badge = coming due soon)."""
     category = CATEGORY_SENSOR
 
     def __init__(self, driver, display_name: str, task_id: str, on_done,
@@ -109,10 +110,6 @@ class UpkeepTask(Accessory):
         self.char_contact = serv.configure_char(
             "ContactSensorState", value=_OPEN if due else _CLOSED,
         )
-        switch = self.add_preload_service("Switch")
-        self.char_on = switch.configure_char(
-            "On", value=False, setter_callback=self._switch_set,
-        )
         bulb = self.add_preload_service("Lightbulb")
         self.char_light = bulb.configure_char(
             "On", value=due, setter_callback=self._light_set,
@@ -124,26 +121,23 @@ class UpkeepTask(Accessory):
         )
         batt.configure_char("ChargingState", value=_NOT_CHARGEABLE)
 
-    def _switch_set(self, value) -> None:
-        if not value:
-            return  # the snap-back / a manual off — nothing to record
-        logging.info("task '%s' marked done from HomeKit", self.task_id)
-        self._on_done(self.task_id)
-        # Momentary behaviour: acknowledge the tap, then snap back off.
-        # (set_value does not re-enter this callback — only client writes do.)
-        self.driver.loop.call_later(1.0, self.char_on.set_value, False)
-
     def _light_set(self, value) -> None:
-        """The due-lamp doubles as the reset control: turning it OFF while
-        the task is due marks it done. A manual ON while on schedule means
-        nothing — snap it back off. (Reads the contact char for due-ness so
-        a client write and the tick can't disagree.)"""
+        """Any client interaction with the due-lamp means "chore done":
+        due (lit) + turned OFF → mark done; on schedule (dark) + turned ON →
+        an early done — mark it and snap the lamp back off. The deferred
+        snap-back matters: pyhap applies the client's written value AFTER
+        this callback returns, so an immediate set_value(False) would be
+        overwritten. (Reads the contact char for due-ness so a client write
+        and the tick can't disagree.)"""
         due = self.char_contact.value == _OPEN
         if not value and due:
             logging.info("task '%s' marked done from HomeKit (due-lamp off)",
                          self.task_id)
             self._on_done(self.task_id)
         elif value and not due:
+            logging.info("task '%s' marked done early from HomeKit "
+                         "(dark due-lamp tapped)", self.task_id)
+            self._on_done(self.task_id)
             self.driver.loop.call_later(1.0, self.char_light.set_value, False)
 
     def set_status(self, due: bool, level: int) -> None:
@@ -185,7 +179,7 @@ class UpkeepBridge(Bridge):
 
     def refresh(self) -> None:
         """Recompute due-ness and push it onto the sensors. Runs in the HAP
-        event loop (tick, switch callback, or call_soon_threadsafe from HTTP)."""
+        event loop (tick, lamp callback, or call_soon_threadsafe from HTTP)."""
         status = self._status_map(datetime.now())
         for task_id, acc in self.task_accessories.items():
             acc.set_status(*status[task_id])
