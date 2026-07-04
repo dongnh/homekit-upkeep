@@ -8,7 +8,8 @@ One accessory per recurring chore, each carrying a Contact Sensor, a due-lamp Li
 
 The battery is the countdown: HomeKit has no free-text tile, so each task reads 100% right after you mark it done and drains linearly to 0% at the due moment. Below 20% the low-battery badge appears — a "coming due soon" warning before the sensor ever opens.
 
-<img width="853" height="778" alt="image" src="https://github.com/user-attachments/assets/ff9ef072-753e-47fd-9cc6-484e51de12a3" />
+<img width="723" height="778" alt="Screenshot 2026-07-04 at 1 40 04 PM" src="https://github.com/user-attachments/assets/c2d35ccf-7d8f-4102-800b-9c3a4f9a7846" />
+
 
 ## How it works
 
