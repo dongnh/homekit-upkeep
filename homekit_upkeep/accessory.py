@@ -1,10 +1,17 @@
 """HomeKit accessory definitions — one Contact Sensor + mark-done Switch +
-countdown Battery per task.
+due-lamp Lightbulb + countdown Battery per task.
 
 Polarity follows light-programmer-homekit's convention (the standard one for
 contact sensors): a task in good standing reads **Closed** (contact detected)
 and an overdue one **Opened** — the alert state, so Apple Home's fixed
 "<accessory name> Opened" notification means "time to do this".
+
+The due-lamp is the visible indicator and the reset control: it lights up
+when the task comes due (the room shows "a light on"), and turning it OFF
+marks the task done. Only the Contact Sensor pushes notifications — HomeKit
+doesn't notify on lights — so the lamp complements the sensor, it doesn't
+replace it. The Switch stays for marking a task done early, while its lamp
+is dark.
 
 The Battery is the countdown display: HomeKit has no free-text/number tile,
 so each task carries a virtual battery that reads 100% right after mark-done
@@ -87,8 +94,9 @@ class UpkeepTask(Accessory):
     """One maintenance task: a Contact Sensor carrying the due state (drives
     notifications), a Switch that marks the task done — flip it on when the
     chore is finished; the cycle restarts and the switch snaps back off —
-    and a virtual Battery counting down the cycle (100% = just done,
-    0% = due, low-battery badge = coming due soon)."""
+    a due-lamp Lightbulb (lit = due; turn it off to mark done) and a virtual
+    Battery counting down the cycle (100% = just done, 0% = due,
+    low-battery badge = coming due soon)."""
     category = CATEGORY_SENSOR
 
     def __init__(self, driver, display_name: str, task_id: str, on_done,
@@ -104,6 +112,10 @@ class UpkeepTask(Accessory):
         switch = self.add_preload_service("Switch")
         self.char_on = switch.configure_char(
             "On", value=False, setter_callback=self._switch_set,
+        )
+        bulb = self.add_preload_service("Lightbulb")
+        self.char_light = bulb.configure_char(
+            "On", value=due, setter_callback=self._light_set,
         )
         batt = self.add_preload_service("BatteryService")
         self.char_level = batt.configure_char("BatteryLevel", value=level)
@@ -121,10 +133,25 @@ class UpkeepTask(Accessory):
         # (set_value does not re-enter this callback — only client writes do.)
         self.driver.loop.call_later(1.0, self.char_on.set_value, False)
 
+    def _light_set(self, value) -> None:
+        """The due-lamp doubles as the reset control: turning it OFF while
+        the task is due marks it done. A manual ON while on schedule means
+        nothing — snap it back off. (Reads the contact char for due-ness so
+        a client write and the tick can't disagree.)"""
+        due = self.char_contact.value == _OPEN
+        if not value and due:
+            logging.info("task '%s' marked done from HomeKit (due-lamp off)",
+                         self.task_id)
+            self._on_done(self.task_id)
+        elif value and not due:
+            self.driver.loop.call_later(1.0, self.char_light.set_value, False)
+
     def set_status(self, due: bool, level: int) -> None:
         # set_value only notifies Apple Home when the value actually changes,
         # so re-applying the same state every tick is cheap and spam-free.
+        # Contact first: _light_set derives due-ness from it.
         self.char_contact.set_value(_OPEN if due else _CLOSED)
+        self.char_light.set_value(due)
         self.char_level.set_value(level)
         self.char_low.set_value(1 if level <= LOW_BATTERY_PCT else 0)
 

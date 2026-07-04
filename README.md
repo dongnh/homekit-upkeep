@@ -4,7 +4,7 @@ Household maintenance on schedule, from the Home app — water the plants, clean
 
 ## What it is
 
-One accessory per recurring chore, each carrying a Contact Sensor, a Switch and a countdown Battery — the entire interface. **Closed** means the task is on schedule; **Open** means it's due (the standard convention: Open is the alert state). Turn on notifications and Apple Home tells you the moment a chore comes due — "Water Office ZZ Plant Opened". Done it? Flip the task's switch: the sensor closes, the countdown restarts, the switch snaps back off.
+One accessory per recurring chore, each carrying a Contact Sensor, a due-lamp Lightbulb, a Switch and a countdown Battery — the entire interface. **Closed** means the task is on schedule; **Open** means it's due (the standard convention: Open is the alert state). Turn on notifications and Apple Home tells you the moment a chore comes due — "Water Office ZZ Plant Opened" — and the task's lamp lights up, so the room visibly shows work waiting. Done it? **Turn the lamp off**: the sensor closes, the countdown restarts. (The switch does the same and also covers doing a chore early, while its lamp is dark; a lamp switched on by hand just snaps back off.)
 
 The battery is the countdown: HomeKit has no free-text tile, so each task reads 100% right after you mark it done and drains linearly to 0% at the due moment. Below 20% the low-battery badge appears — a "coming due soon" warning before the sensor ever opens.
 
